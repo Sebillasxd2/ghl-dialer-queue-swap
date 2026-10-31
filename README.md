@@ -13,7 +13,7 @@ Each one is reproduced by a test against the in-memory fake ([test/platform-trap
 1. **Adding a tag the contact already has is a silent no-op.** The API answers success, nothing changes, and the "tag added" trigger never fires. A lead that still carried an old tag never reaches today's queue. Fix: remove the tag, then add it, so every add is a real event.
 2. **Removing a tag does not take the contact out of the workflow.** A contact whose tag was removed by hand stays in the call queue as a ghost, and a search by tag will never find it again. Fix: also search by owner, and unenroll explicitly.
 3. **Without `assignedTo` the rep's queue is empty.** A user restricted to their assigned data only sees contacts assigned to them. The contact is enrolled, the workflow ran, and the rep still sees nothing. Fix: upsert with `assignedTo` set to the rep's user id.
-4. **The search index trails writes.** A contact tagged a moment ago may not be returned by `POST /contacts/search` yet, so one empty search does not prove an empty queue. Fix: keep looping until several searches in a row, spaced past the lag, come back empty. Verify the load with `GET /contacts/{id}`, which reads the record itself.
+4. **The search index trails writes.** A contact tagged a moment ago may not be returned by `POST /contacts/search` yet, so one empty search does not prove an empty queue. Fix: keep looping, with a settle delay longer than the lag, until several passes in a row find nothing left to remove. Verify the load with `GET /contacts/{id}`, which reads the record itself.
 5. **Status codes are not outcomes.** The tests simulate a write that answers 200 and does not apply. The only thing that catches it is checking the resulting state, so both the wipe and the load end in a verification step.
 
 ## The solution
@@ -21,12 +21,14 @@ Each one is reproduced by a test against the in-memory fake ([test/platform-trap
 `swapQueue()` in [src/swap.ts](src/swap.ts) runs five steps, in this order:
 
 1. **Plan** (pure, no API calls). Normalize phones to E.164, drop invalid and toll-free numbers, drop duplicate numbers, skip numbers dialed in the last N days (cool-off, default 7), order mobile first, cap at 250. If the plan is empty, stop: an empty plan must never blank yesterday's queue.
-2. **Wipe.** Find the union of "has the queue tag" and "is assigned to the rep". For each contact: unenroll from the rep's workflow, remove the tag, release ownership. Contacts with a protected tag (`booked`, `customer`) leave the queue but keep their owner. Repeat with a settle delay until `confirmPasses` consecutive searches are empty.
+2. **Wipe.** Find the union of "has the queue tag" and "is assigned to the rep". For each contact: unenroll from the rep's workflow, remove the tag, release ownership. Contacts with a protected tag (`booked`, `customer`) leave the queue but keep their owner. Repeat with a settle delay until `confirmPasses` consecutive passes find nothing left to remove (protected contacts keep their owner, so they stay in the owner search; they count as done once they are out of the workflow and untagged). A search that fails ends the wipe as not verified.
 3. **Gate.** If the wipe could not verify an empty queue within `maxPasses`, abort. Nothing gets loaded on top of leftovers.
-4. **Load.** Upsert with `assignedTo`, then remove and re-add the queue tag. Tags never travel inside the upsert body, so the upsert cannot clobber tags other processes own.
-5. **Verify.** Read every loaded contact back by id and report owner or tag mismatches.
+4. **Load.** Upsert with `assignedTo`, then remove the queue tag, read the contact back to confirm it is gone, and add it again. If the removal did not stick, the add would be a silent no-op, so that lead fails instead. Tags never travel inside the upsert body, so the upsert cannot clobber tags other processes own.
+5. **Verify.** Read every loaded contact back by id and report owner or tag mismatches, or a read that failed.
 
-Every API call goes through one retry policy: 429 and 5xx back off exponentially and honor `Retry-After`; any other 4xx fails that lead and the run moves on.
+A run in which nothing landed is reported as `aborted` with reason `load_failed`, not `loaded`: by then the old queue is gone, which is the outcome this whole tool exists to prevent. The CLI exits 0 only when every planned lead landed and read back correctly, so a scheduler sees anything less as a failure.
+
+Every API call goes through one retry policy: 429 and 5xx back off exponentially and honor `Retry-After`. Any other 4xx fails that one contact (in the wipe) or lead (in the load) and the run moves on; a failed search stops the wipe, and a failed read-back is a verification mismatch. None of them escape as an exception: the report always comes back.
 
 ## Run it
 
@@ -49,7 +51,7 @@ plan:   12 selected, skipped { toll_free: 2, invalid_phone: 1, duplicate_phone: 
 wipe:   7 removed in 4 passes, verified empty: true, errors: 0
 load:   12 loaded, 0 failed
 verify: ok
-retries after 429/5xx: 9
+retries after 429/5xx: 11
 after:  Avery Sample sees 12 contacts
 other rep untouched: 1 contact(s)
 ```
@@ -77,9 +79,10 @@ This writes to a live CRM, so point it at a test location first. The token needs
 
 ## Known gaps
 
-- **Clearing `assignedTo`.** The public docs type it as a string and do not say how to clear it. `releaseOwner` sends `null`; confirm on a test location before relying on it.
-- **Unenrolling a contact that is not enrolled.** The response is not documented. The adapter treats 404 as already done.
-- **Search filter shape.** `{ field: "tags", operator: "contains", value }` and `{ field: "assignedTo", operator: "eq", value }` follow the public Search Contacts docs as I read them. Check them against your account; the tests pin exactly these shapes.
+- **Verification proves owner and tag, not that the workflow fired.** The public API used here does not expose workflow enrollment. Today the trigger is guarded by the read between removing and re-adding the tag. To confirm on a test location: that the call task actually appears for the rep.
+- **Clearing `assignedTo`.** The public docs type it as a string and do not say how to clear it. Today `releaseOwner` sends `null`. To confirm on a test location before relying on it.
+- **Unenrolling a contact that is not enrolled.** The response is not documented. Today the adapter treats 404 as already done. To confirm: what the API actually returns.
+- **Search filter shape.** Today the adapter sends `{ field: "tags", operator: "contains", value }` and `{ field: "assignedTo", operator: "eq", value }`, as I read the public Search Contacts docs, and the tests pin exactly these shapes. To confirm against your account.
 
 ---
 

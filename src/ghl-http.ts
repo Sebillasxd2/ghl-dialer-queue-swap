@@ -65,8 +65,10 @@ export function createHttpPort(options: HttpPortOptions): GhlPort {
         ...contact,
         tags: contact.tags ?? [],
       }));
+      // A page can come back shorter than pageLimit without being the last one, so the
+      // cursor, not the page length, decides whether to ask again.
       const last = res.contacts?.at(-1);
-      return contacts.length === pageLimit && last?.searchAfter ? { contacts, next: last.searchAfter } : { contacts };
+      return last?.searchAfter ? { contacts, next: last.searchAfter } : { contacts };
     },
 
     async getContact(contactId) {

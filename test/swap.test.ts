@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { buildLeakyLocation } from "../src/demo.ts";
 import type { Fault } from "../src/fake-ghl.ts";
-import { swapQueue } from "../src/swap.ts";
+import { isClean, swapQueue } from "../src/swap.ts";
 import { calls, leads, NOW, otherRep, rep, RETRY, WIPE } from "./helpers.ts";
 
 async function run(options: { rateLimitEvery?: number; faults?: Fault[]; leads?: typeof leads } = {}) {
@@ -66,4 +66,29 @@ test("verification reads records back and flags a tag that silently did not stic
   assert.equal(report.verify?.ok, false);
   assert.equal(report.verify?.mismatches.length, 1);
   assert.equal(report.verify?.mismatches[0]?.problem, "missing_tag");
+  assert.equal(isClean(report), false, "a scheduler must not read this as success");
+});
+
+test("a load where nothing lands is aborted, not 'loaded': the old queue is already gone", async () => {
+  const { ghl, report } = await run({ faults: [{ op: "upsertContact", status: 422 }] });
+
+  assert.equal(report.status, "aborted");
+  assert.equal(report.reason, "load_failed");
+  assert.equal(report.load?.failed.length, 12);
+  assert.equal(ghl.visibleQueue(rep.ghlUserId, rep.workflowId).length, 0, "this is the empty queue the gate exists to prevent");
+  assert.equal(isClean(report), false);
+});
+
+test("a search that keeps failing ends the run with a report, not an exception", async () => {
+  const { ghl, report } = await run({ faults: [{ op: "searchContacts", status: 422 }] });
+
+  assert.equal(report.status, "aborted");
+  assert.equal(report.reason, "wipe_not_verified");
+  assert.equal(report.wipe?.errors[0]?.contactId, "(search)");
+  assert.equal(ghl.count("upsertContact"), 0);
+});
+
+test("a clean run is clean", async () => {
+  const { report } = await run();
+  assert.equal(isClean(report), true);
 });

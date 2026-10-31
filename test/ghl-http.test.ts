@@ -66,15 +66,21 @@ test("searches by tag and follows the searchAfter cursor of the last contact", a
   assert.equal("searchAfter" in first.contacts[0]!, false, "cursor is not leaked into contacts");
 });
 
-test("searches by owner; a short page is the last page", async () => {
+test("searches by owner; a short page still hands back its cursor", async () => {
   const { requests, fetchImpl } = recordingFetch(() => json({ contacts: [{ id: "a", searchAfter: [1, "a"] }] }));
-  const port = createHttpPort({ token: "t", locationId: "loc_demo_0001", pageLimit: 2, fetch: fetchImpl });
+  const port = createHttpPort({ token: "t", locationId: "loc_demo_0001", pageLimit: 100, fetch: fetchImpl });
   const page = await port.searchContacts({ assignedTo: "usr_demo_0001" });
   assert.deepEqual((requests[0]?.body as { filters: unknown }).filters, [
     { field: "assignedTo", operator: "eq", value: "usr_demo_0001" },
   ]);
-  assert.equal(page.next, undefined);
+  assert.deepEqual(page.next, [1, "a"], "asked for 100, got 1: the server may cap pages, so the cursor decides");
   assert.deepEqual(page.contacts[0]?.tags, [], "missing tags normalize to an empty list");
+});
+
+test("an empty page has no cursor", async () => {
+  const { fetchImpl } = recordingFetch(() => json({ contacts: [] }));
+  const port = createHttpPort({ token: "t", locationId: "loc_demo_0001", fetch: fetchImpl });
+  assert.equal((await port.searchContacts({ tag: "q" })).next, undefined);
 });
 
 test("tag writes use the tag endpoints, never the contact body", async () => {

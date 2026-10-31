@@ -16,7 +16,7 @@ export interface SwapOptions extends PlanOptions {
 
 export interface SwapReport {
   status: "loaded" | "aborted";
-  reason?: "nothing_to_load" | "wipe_not_verified";
+  reason?: "nothing_to_load" | "wipe_not_verified" | "load_failed";
   plan: { selected: number; skipped: Partial<Record<SkipReason, number>> };
   wipe?: WipeResult;
   load?: LoadResult;
@@ -70,5 +70,15 @@ export async function swapQueue(
     { invoke },
   );
 
+  // The queue is already empty at this point, so a load where nothing landed is the
+  // worst outcome there is, and it must not read as success to whoever runs this.
+  if (load.loaded.length === 0) {
+    return { status: "aborted", reason: "load_failed", plan: planSummary, wipe, load, verify, retries: caller.retries() };
+  }
   return { status: "loaded", plan: planSummary, wipe, load, verify, retries: caller.retries() };
+}
+
+/** Clean means every planned lead landed and read back correctly. Anything less needs a person. */
+export function isClean(report: SwapReport): boolean {
+  return report.status === "loaded" && report.verify?.ok === true && report.load?.failed.length === 0;
 }

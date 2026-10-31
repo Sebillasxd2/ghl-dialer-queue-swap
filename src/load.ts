@@ -10,7 +10,7 @@ export interface LoadResult {
 
 export interface VerifyResult {
   ok: boolean;
-  mismatches: { contactId: string; problem: "not_assigned" | "missing_tag" }[];
+  mismatches: { contactId: string; problem: "not_assigned" | "missing_tag" | "read_failed" }[];
 }
 
 /**
@@ -20,6 +20,8 @@ export interface VerifyResult {
  * 2. Remove the queue tag, then add it. Adding a tag the contact already has is a
  *    silent no-op: nothing errors, but the "tag added" trigger never fires and the
  *    contact never reaches the call queue. Removing first makes every add a real event.
+ *    The contact is read back between the two calls: if the tag is still there, the
+ *    add would be a no-op again, so that lead fails instead of passing quietly.
  *
  * Tags are never sent inside the upsert body, so the upsert cannot clobber tags that
  * other processes own.
@@ -46,6 +48,10 @@ export async function loadQueue(
         }),
       );
       await ctx.invoke(() => ghl.removeTag(id, rep.queueTag));
+      const between = await ctx.invoke(() => ghl.getContact(id));
+      if (between.tags.includes(rep.queueTag)) {
+        throw new Error("the queue tag was still on the contact after removing it; adding it again would not fire the trigger");
+      }
       await ctx.invoke(() => ghl.addTag(id, rep.queueTag));
       result.loaded.push({ leadId: lead.id, contactId: id, created });
     } catch (err) {
@@ -58,7 +64,8 @@ export async function loadQueue(
 
 /**
  * Reads every loaded contact back by id. Uses `getContact`, not search: the search
- * index lags, so a search right after the load would report stale state.
+ * index lags, so a search right after the load would report stale state. A read that
+ * fails is a mismatch too: an unverified contact is not a verified one.
  */
 export async function verifyLoad(
   ghl: GhlPort,
@@ -68,9 +75,13 @@ export async function verifyLoad(
 ): Promise<VerifyResult> {
   const mismatches: VerifyResult["mismatches"] = [];
   for (const contactId of contactIds) {
-    const contact = await ctx.invoke(() => ghl.getContact(contactId));
-    if (contact.assignedTo !== rep.ghlUserId) mismatches.push({ contactId, problem: "not_assigned" });
-    if (!contact.tags.includes(rep.queueTag)) mismatches.push({ contactId, problem: "missing_tag" });
+    try {
+      const contact = await ctx.invoke(() => ghl.getContact(contactId));
+      if (contact.assignedTo !== rep.ghlUserId) mismatches.push({ contactId, problem: "not_assigned" });
+      if (!contact.tags.includes(rep.queueTag)) mismatches.push({ contactId, problem: "missing_tag" });
+    } catch {
+      mismatches.push({ contactId, problem: "read_failed" });
+    }
   }
   return { ok: mismatches.length === 0, mismatches };
 }

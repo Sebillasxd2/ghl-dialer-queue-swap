@@ -54,7 +54,14 @@ export async function wipeQueue(
   let emptyStreak = 0;
 
   for (let pass = 1; pass <= options.maxPasses; pass++) {
-    const found = await findQueueMembers(ghl, rep, ctx.invoke);
+    let found: Contact[];
+    try {
+      found = await findQueueMembers(ghl, rep, ctx.invoke);
+    } catch (err) {
+      // Without a search there is no way to prove the queue empty.
+      errors.push({ contactId: "(search)", message: (err as Error).message });
+      return { verifiedEmpty: false, passes: pass, removed: [...removed], errors };
+    }
     const pending = found.filter((contact) => {
       const isProtected = contact.tags.some((tag) => options.protectedTags.includes(tag));
       return contact.tags.includes(rep.queueTag) || !isProtected || !handledProtected.has(contact.id);
@@ -89,16 +96,25 @@ export async function wipeQueue(
   return { verifiedEmpty: false, passes: options.maxPasses, removed: [...removed], errors };
 }
 
-/** Union of "has the queue tag" and "is assigned to the rep", deduplicated by id. */
+/**
+ * Union of "has the queue tag" and "is assigned to the rep", deduplicated by id.
+ * Follows the cursor until a page is empty or has none: a short page is not
+ * necessarily the last one.
+ */
 async function findQueueMembers(ghl: GhlPort, rep: Rep, invoke: Invoke): Promise<Contact[]> {
   const byId = new Map<string, Contact>();
   for (const filter of [{ tag: rep.queueTag }, { assignedTo: rep.ghlUserId }] satisfies SearchFilter[]) {
     let cursor: unknown[] | undefined;
-    do {
+    let previous = "";
+    for (;;) {
       const page = await invoke(() => ghl.searchContacts(filter, cursor));
       for (const contact of page.contacts) byId.set(contact.id, contact);
+      if (!page.contacts.length || !page.next) break;
+      const key = JSON.stringify(page.next);
+      if (key === previous) throw new Error(`search cursor did not advance: ${key}`);
+      previous = key;
       cursor = page.next;
-    } while (cursor);
+    }
   }
   return [...byId.values()];
 }

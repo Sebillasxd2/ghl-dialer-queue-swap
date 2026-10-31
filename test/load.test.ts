@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { ManualClock } from "../src/clock.ts";
 import { FakeGhl } from "../src/fake-ghl.ts";
-import { loadQueue } from "../src/load.ts";
+import { loadQueue, verifyLoad } from "../src/load.ts";
 import { makeCaller } from "../src/retry.ts";
 import { rep } from "./helpers.ts";
 
@@ -34,6 +34,30 @@ test("loaded contacts are owned by the rep and keep tags other processes set", a
   const contact = ghl.peek(existing.id);
   assert.equal(contact?.assignedTo, rep.ghlUserId);
   assert.deepEqual(contact?.tags, ["newsletter", rep.queueTag]);
+});
+
+test("a tag removal that answers 200 but does not stick fails that lead before the no-op add", async () => {
+  const clock = new ManualClock(0);
+  const ghl = new FakeGhl({ clock, triggers: { [rep.queueTag]: rep.workflowId }, faults: [{ op: "removeTag", silent: true }] });
+  ghl.seed({ phone: lead.phone, tags: [rep.queueTag] });
+  const ctx = { invoke: makeCaller({ retries: 0, baseMs: 0, maxMs: 0 }, (ms) => clock.sleep(ms)).call, source: "test" };
+
+  const result = await loadQueue(ghl, rep, [lead], ctx);
+
+  assert.equal(result.loaded.length, 0);
+  assert.match(result.failed[0]?.message ?? "", /still on the contact after removing it/);
+  assert.equal(ghl.count("addTag"), 0, "the add that would have been a silent no-op was never sent");
+});
+
+test("a read-back that fails is a mismatch, not an exception", async () => {
+  const clock = new ManualClock(0);
+  const ghl = new FakeGhl({ clock, faults: [{ op: "getContact", contactId: "ct_missing", status: 404 }] });
+  const ok = ghl.seed({ phone: lead.phone, tags: [rep.queueTag], assignedTo: rep.ghlUserId });
+  const invoke = makeCaller({ retries: 0, baseMs: 0, maxMs: 0 }, (ms) => clock.sleep(ms)).call;
+
+  const result = await verifyLoad(ghl, rep, [ok.id, "ct_missing"], { invoke });
+
+  assert.deepEqual(result, { ok: false, mismatches: [{ contactId: "ct_missing", problem: "read_failed" }] });
 });
 
 test("one failing lead does not stop the rest", async () => {

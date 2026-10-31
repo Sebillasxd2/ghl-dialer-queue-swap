@@ -3,7 +3,7 @@ import { parseArgs } from "node:util";
 import { buildLeakyLocation, DEMO_NOW } from "./demo.ts";
 import { createHttpPort } from "./ghl-http.ts";
 import { countSkips, DEFAULT_PLAN_OPTIONS, planQueue } from "./plan.ts";
-import { swapQueue, type SwapReport } from "./swap.ts";
+import { isClean, swapQueue, type SwapReport } from "./swap.ts";
 import type { Call, Lead, Rep } from "./types.ts";
 
 const USAGE = `usage:
@@ -81,5 +81,6 @@ function printReport(report: SwapReport): void {
   if (report.load) console.log(`load:   ${report.load.loaded.length} loaded, ${report.load.failed.length} failed`);
   if (report.verify) console.log(`verify: ${report.verify.ok ? "ok" : `${report.verify.mismatches.length} mismatches`}`);
   console.log(`retries after 429/5xx: ${report.retries}`);
-  if (report.status === "aborted") process.exitCode = 1;
+  // A scheduler only sees the exit code: anything short of a clean load is a failure.
+  if (!isClean(report)) process.exitCode = 1;
 }
