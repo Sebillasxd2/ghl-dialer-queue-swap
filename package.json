@@ -1,0 +1,21 @@
+{
+  "name": "ghl-dialer-queue-swap",
+  "version": "0.1.0",
+  "description": "Idempotent daily swap of a sales rep's dialer queue in GoHighLevel, with the platform traps encoded as tests.",
+  "type": "module",
+  "license": "MIT",
+  "private": true,
+  "engines": {
+    "node": ">=22.18"
+  },
+  "scripts": {
+    "test": "node --test \"test/**/*.test.ts\"",
+    "typecheck": "tsc -p tsconfig.json",
+    "demo": "node src/cli.ts demo",
+    "plan": "node src/cli.ts plan"
+  },
+  "devDependencies": {
+    "@types/node": "^22.20.5",
+    "typescript": "^5.9.3"
+  }
+}

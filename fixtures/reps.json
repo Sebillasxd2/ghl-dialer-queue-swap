@@ -1,0 +1,16 @@
+[
+  {
+    "id": "rep_demo_01",
+    "name": "Avery Sample",
+    "ghlUserId": "usr_demo_0001",
+    "queueTag": "dialer-queue-avery",
+    "workflowId": "wf_demo_0001"
+  },
+  {
+    "id": "rep_demo_02",
+    "name": "Jordan Sample",
+    "ghlUserId": "usr_demo_0002",
+    "queueTag": "dialer-queue-jordan",
+    "workflowId": "wf_demo_0002"
+  }
+]

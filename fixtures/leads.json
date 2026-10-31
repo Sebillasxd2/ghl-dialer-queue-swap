@@ -1,0 +1,20 @@
+[
+  { "id": "ld_001", "company": "Prairie Gate Dental", "firstName": "Dana", "lastName": "Whitfield", "email": "dana.whitfield@example.com", "phone": "+1 (555) 201-0001", "lineType": "landline", "city": "Des Moines", "state": "IA" },
+  { "id": "ld_002", "company": "Ridgeview Property Management", "firstName": "Marcus", "lastName": "Oyelaran", "email": "marcus.oyelaran@example.com", "phone": "555.201.0002", "lineType": "mobile", "city": "West Des Moines", "state": "IA" },
+  { "id": "ld_003", "company": "Hawkeye Storage Partners", "firstName": "Lena", "lastName": "Brandt", "email": "lena.brandt@example.com", "phone": "+18005550142", "lineType": "landline", "city": "Ankeny", "state": "IA" },
+  { "id": "ld_004", "company": "Northfork Veterinary Clinic", "firstName": "Priya", "lastName": "Raman", "email": "priya.raman@example.com", "phone": "5552010004", "lineType": "mobile", "city": "Urbandale", "state": "IA" },
+  { "id": "ld_005", "company": "Two Rivers Auto Body", "firstName": "Tom", "lastName": "Kessler", "email": "tom.kessler@example.com", "phone": "555-201-0005", "lineType": "voip", "city": "Des Moines", "state": "IA" },
+  { "id": "ld_006", "company": "Copper Kettle Bakery", "firstName": "Ana", "lastName": "Lucero", "email": "ana.lucero@example.com", "phone": "555-0199", "lineType": "landline", "city": "Altoona", "state": "IA" },
+  { "id": "ld_007", "company": "Bluestem Office Suites", "firstName": "Grant", "lastName": "Hollis", "email": "grant.hollis@example.com", "phone": "+15552010007", "city": "Des Moines", "state": "IA" },
+  { "id": "ld_008", "company": "Bluestem Office Suites", "firstName": "Kara", "lastName": "Hollis", "email": "kara.hollis@example.com", "phone": "+1 555 201 0007", "lineType": "mobile", "city": "Des Moines", "state": "IA" },
+  { "id": "ld_009", "company": "Meadowlark Senior Living", "firstName": "Ruth", "lastName": "Calder", "email": "ruth.calder@example.com", "phone": "+15552010009", "lineType": "landline", "city": "Ankeny", "state": "IA" },
+  { "id": "ld_010", "company": "Ironwood Fitness", "firstName": "Cal", "lastName": "Ibarra", "email": "cal.ibarra@example.com", "phone": "+15552010010", "lineType": "mobile", "city": "Johnston", "state": "IA" },
+  { "id": "ld_011", "company": "Lakeshore Pediatrics", "firstName": "June", "lastName": "Albers", "email": "june.albers@example.com", "phone": "+15552010011", "lineType": "landline", "city": "Des Moines", "state": "IA" },
+  { "id": "ld_012", "company": "Sunfield Apartments", "firstName": "Omar", "lastName": "Haddad", "email": "omar.haddad@example.com", "phone": "+15552010012", "lineType": "mobile", "city": "Clive", "state": "IA" },
+  { "id": "ld_013", "company": "Kestrel Engineering", "firstName": "Beth", "lastName": "Morrow", "email": "beth.morrow@example.com", "phone": "+15552010013", "lineType": "voip", "city": "Des Moines", "state": "IA" },
+  { "id": "ld_014", "company": "Elm Street Law Office", "firstName": "Victor", "lastName": "Pham", "email": "victor.pham@example.com", "phone": "+1-555-201-0014", "lineType": "landline", "city": "Ankeny", "state": "IA" },
+  { "id": "ld_015", "company": "Granary Coworking", "firstName": "Sofia", "lastName": "Lindqvist", "email": "sofia.lindqvist@example.com", "phone": "+15552010015", "lineType": "mobile", "city": "Des Moines", "state": "IA" },
+  { "id": "ld_016", "company": "Fieldstone Church Office", "firstName": "Paul", "lastName": "Ngata", "email": "paul.ngata@example.com", "phone": "+18885550177", "lineType": "toll_free", "city": "Urbandale", "state": "IA" },
+  { "id": "ld_017", "company": "Willow Creek HOA", "firstName": "Erin", "lastName": "Vasquez", "email": "erin.vasquez@example.com", "phone": "+15552010017", "city": "Waukee", "state": "IA" },
+  { "id": "ld_018", "company": "Oakline Chiropractic", "firstName": "Nate", "lastName": "Fuller", "email": "nate.fuller@example.com", "phone": "+15552010018", "lineType": "mobile", "city": "Pleasant Hill", "state": "IA" }
+]
