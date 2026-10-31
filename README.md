@@ -28,7 +28,7 @@ Each one is reproduced by a test against the in-memory fake ([test/platform-trap
 
 A run in which nothing landed is reported as `aborted` with reason `load_failed`, not `loaded`: by then the old queue is gone, which is the outcome this whole tool exists to prevent. The CLI exits 0 only when every planned lead landed and read back correctly, so a scheduler sees anything less as a failure.
 
-Every API call goes through one retry policy: 429 and 5xx back off exponentially and honor `Retry-After`. Any other 4xx fails that one contact (in the wipe) or lead (in the load) and the run moves on; a failed search stops the wipe, and a failed read-back is a verification mismatch. None of them escape as an exception: the report always comes back.
+Every API call goes through one retry policy: 429 and 5xx back off exponentially, capped at `maxMs`, and honor `Retry-After`; a `Retry-After` longer than `maxMs` is not slept or retried early, the call fails at once with the server's value. Any other 4xx fails that one contact (in the wipe) or lead (in the load) and the run moves on; a failed search stops the wipe, and a failed read-back is a verification mismatch. None of them escape as an exception: the report always comes back.
 
 ## Run it
 

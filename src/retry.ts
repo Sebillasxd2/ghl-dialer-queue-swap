@@ -12,7 +12,11 @@ export function isRetryable(err: unknown): boolean {
   return err instanceof GhlHttpError && (err.status === 429 || err.status >= 500);
 }
 
-/** Retries 429 and 5xx with exponential backoff, honoring `Retry-After` when present. */
+/**
+ * Retries 429 and 5xx with exponential backoff capped at `maxMs`, honoring
+ * `Retry-After` when present. A `Retry-After` beyond `maxMs` is not slept and not
+ * retried early: the error is rethrown at once, carrying the server's value.
+ */
 export function makeCaller(options: RetryOptions, sleep: (ms: number) => Promise<void>) {
   let retries = 0;
 
@@ -22,9 +26,10 @@ export function makeCaller(options: RetryOptions, sleep: (ms: number) => Promise
         return await fn();
       } catch (err) {
         if (!isRetryable(err) || attempt >= options.retries) throw err;
+        const retryAfter = (err as GhlHttpError).retryAfterMs;
+        if (retryAfter !== undefined && retryAfter > options.maxMs) throw err;
         retries++;
-        const backoff = Math.min(options.maxMs, options.baseMs * 2 ** attempt);
-        await sleep((err as GhlHttpError).retryAfterMs ?? backoff);
+        await sleep(retryAfter ?? Math.min(options.maxMs, options.baseMs * 2 ** attempt));
       }
     }
   }
