@@ -31,6 +31,7 @@ export interface WipeResult {
 
 /**
  * Empties a rep's queue and only reports success once the queue is verifiably empty.
+ * Each contact found is read back by id before anything is decided about it.
  *
  * A contact can be in the queue two ways, so both are searched every pass:
  * - it carries the queue tag (the normal case);
@@ -62,10 +63,7 @@ export async function wipeQueue(
       errors.push({ contactId: "(search)", message: (err as Error).message });
       return { verifiedEmpty: false, passes: pass, removed: [...removed], errors };
     }
-    const pending = found.filter((contact) => {
-      const isProtected = contact.tags.some((tag) => options.protectedTags.includes(tag));
-      return contact.tags.includes(rep.queueTag) || !isProtected || !handledProtected.has(contact.id);
-    });
+    const pending = found.filter((contact) => contact.tags.includes(rep.queueTag) || !handledProtected.has(contact.id));
 
     if (pending.length === 0) {
       emptyStreak++;
@@ -74,9 +72,13 @@ export async function wipeQueue(
       }
     } else {
       emptyStreak = 0;
-      for (const contact of pending) {
-        const isProtected = contact.tags.some((tag) => options.protectedTags.includes(tag));
+      for (const found of pending) {
         try {
+          // Decide from the record, not the search copy: a tag applied inside the index
+          // lag (a contact booked a minute ago) is on the record but not in the search,
+          // and releasing that contact's owner cannot be undone by the next pass.
+          const contact = await ctx.invoke(() => ghl.getContact(found.id));
+          const isProtected = contact.tags.some((tag) => options.protectedTags.includes(tag));
           await ctx.invoke(() => ghl.removeFromWorkflow(contact.id, rep.workflowId));
           if (contact.tags.includes(rep.queueTag)) {
             await ctx.invoke(() => ghl.removeTag(contact.id, rep.queueTag));
@@ -85,7 +87,7 @@ export async function wipeQueue(
           else await ctx.invoke(() => ghl.releaseOwner(contact.id));
           removed.add(contact.id);
         } catch (err) {
-          errors.push({ contactId: contact.id, message: (err as Error).message });
+          errors.push({ contactId: found.id, message: (err as Error).message });
         }
       }
     }

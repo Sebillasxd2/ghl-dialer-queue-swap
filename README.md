@@ -8,7 +8,7 @@ Each rep dials from a queue: contacts that carry the rep's queue tag, which fire
 
 ## The traps nobody documents
 
-Each one is reproduced by a test against the in-memory fake ([test/platform-traps.test.ts](test/platform-traps.test.ts)).
+Each one is reproduced by a test against the in-memory fake: traps 1 to 4 in [test/platform-traps.test.ts](test/platform-traps.test.ts), trap 5 in [test/load.test.ts](test/load.test.ts) and [test/swap.test.ts](test/swap.test.ts).
 
 1. **Adding a tag the contact already has is a silent no-op.** The API answers success, nothing changes, and the "tag added" trigger never fires. A lead that still carried an old tag never reaches today's queue. Fix: remove the tag, then add it, so every add is a real event.
 2. **Removing a tag does not take the contact out of the workflow.** A contact whose tag was removed by hand stays in the call queue as a ghost, and a search by tag will never find it again. Fix: also search by owner, and unenroll explicitly.
@@ -20,8 +20,8 @@ Each one is reproduced by a test against the in-memory fake ([test/platform-trap
 
 `swapQueue()` in [src/swap.ts](src/swap.ts) runs five steps, in this order:
 
-1. **Plan** (pure, no API calls). Normalize phones to E.164, drop invalid and toll-free numbers, drop duplicate numbers, skip numbers dialed in the last N days (cool-off, default 7), order mobile first, cap at 250. If the plan is empty, stop: an empty plan must never blank yesterday's queue.
-2. **Wipe.** Find the union of "has the queue tag" and "is assigned to the rep". For each contact: unenroll from the rep's workflow, remove the tag, release ownership. Contacts with a protected tag (`booked`, `customer`) leave the queue but keep their owner. Repeat with a settle delay until `confirmPasses` consecutive passes find nothing left to remove (protected contacts keep their owner, so they stay in the owner search; they count as done once they are out of the workflow and untagged). A search that fails ends the wipe as not verified.
+1. **Plan** (pure, no API calls). Normalize phones to E.164, drop invalid and toll-free numbers, keep one lead per number (the best line type, then the lowest lead id, whatever order the rows came in), skip numbers dialed in the last N days (cool-off, default 7), order mobile first, cap at 250. If the plan is empty, stop: an empty plan must never blank yesterday's queue.
+2. **Wipe.** Find the union of "has the queue tag" and "is assigned to the rep". For each contact: unenroll from the rep's workflow, remove the tag, release ownership. Contacts with a protected tag (`booked`, `customer`) leave the queue but keep their owner. Whether a contact is protected is decided from the record itself (`GET /contacts/{id}`), not from the search result, so a tag applied inside the index lag still protects it. Repeat with a settle delay until `confirmPasses` consecutive passes find nothing left to remove (protected contacts keep their owner, so they stay in the owner search; they count as done once they are out of the workflow and untagged). A search that fails ends the wipe as not verified.
 3. **Gate.** If the wipe could not verify an empty queue within `maxPasses`, abort. Nothing gets loaded on top of leftovers.
 4. **Load.** Upsert with `assignedTo`, then remove the queue tag, read the contact back to confirm it is gone, and add it again. If the removal did not stick, the add would be a silent no-op, so that lead fails instead. Tags never travel inside the upsert body, so the upsert cannot clobber tags other processes own.
 5. **Verify.** Read every loaded contact back by id and report owner or tag mismatches, or a read that failed.
@@ -59,16 +59,16 @@ other rep untouched: 1 contact(s)
 ### Against a real location
 
 ```sh
-GHL_API_TOKEN=... GHL_LOCATION_ID=... node src/cli.ts swap --live --rep rep_demo_01 --leads my-leads.json --calls my-calls.json
+GHL_API_TOKEN=... GHL_LOCATION_ID=... node src/cli.ts swap --live --reps my-reps.json --rep rep_01 --leads my-leads.json --calls my-calls.json
 ```
 
-This writes to a live CRM, so point it at a test location first. The token needs read and write access to contacts. The rep's workflow (trigger: contact tag added, on the rep's queue tag) is built in the GHL UI; this tool fills the queue, it does not build the workflow.
+`--reps` is required here: the rep record has to carry the account's real `ghlUserId`, `queueTag` and `workflowId` (same shape as [fixtures/reps.json](fixtures/reps.json)); without it the defaults are the synthetic fixtures. A bad `--now`, `--cap` or `--cool-off-days` stops the run with exit 2. This writes to a live CRM, so point it at a test location first. The token needs read and write access to contacts. The rep's workflow (trigger: contact tag added, on the rep's queue tag) is built in the GHL UI; this tool fills the queue, it does not build the workflow.
 
 ## Layout
 
 | path | what |
 |---|---|
-| `src/plan.ts` | E.164, toll-free, duplicates, cool-off, mobile first, cap |
+| `src/plan.ts` | E.164, toll-free, one lead per number, cool-off, mobile first, cap |
 | `src/wipe.ts` | tag and owner union, settle loop, protected tags |
 | `src/load.ts` | upsert with owner, remove then add, read-back verification |
 | `src/swap.ts` | plan, wipe, gate, load, verify |

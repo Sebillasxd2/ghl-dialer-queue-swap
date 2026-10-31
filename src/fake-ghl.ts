@@ -104,8 +104,9 @@ export class FakeGhl implements GhlPort {
     const cutoff = this.clock.now() - this.indexLagMs;
     const after = typeof searchAfter?.[0] === "string" ? searchAfter[0] : "";
     const matches: Contact[] = [];
-    for (const [id, snapshots] of [...this.history].sort(([a], [b]) => a.localeCompare(b))) {
-      if (id <= after) continue;
+    // One ordering for both the sort and the cursor: plain code-unit comparison.
+    for (const [id, snapshots] of [...this.history].sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))) {
+      if (after && id <= after) continue;
       const indexed = snapshots.filter((snap) => snap.at <= cutoff).at(-1)?.state;
       if (!indexed) continue;
       const hit = "tag" in filter ? indexed.tags.includes(filter.tag) : indexed.assignedTo === filter.assignedTo;

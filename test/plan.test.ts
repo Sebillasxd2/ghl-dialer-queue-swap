@@ -12,7 +12,7 @@ test("skips invalid, toll-free, duplicate and recently dialed numbers", () => {
   assert.deepEqual(reasons, {
     ld_003: "toll_free", // landline in the data, but the number is toll-free
     ld_006: "invalid_phone",
-    ld_008: "duplicate_phone",
+    ld_007: "duplicate_phone", // same number as ld_008, which knows it is a cell
     ld_009: "cool_off", // called 3 days ago
     ld_014: "cool_off", // called 6 days ago, history stored in another format
     ld_016: "toll_free",
@@ -28,6 +28,14 @@ test("cool-off boundary is exclusive: exactly N days ago is dialable", () => {
   assert.equal(planQueue([lead], at("2026-03-03T15:00:01Z"), opts).selected.length, 0);
 });
 
+test("a duplicate number keeps the row with the best line type, whatever the row order", () => {
+  const forward = planQueue(leads, calls, opts);
+  const reversed = planQueue([...leads].reverse(), calls, opts);
+  const ids = (plan: typeof forward) => plan.selected.map((lead) => lead.id).sort();
+  assert.deepEqual(ids(reversed), ids(forward));
+  assert.ok(forward.selected.some((lead) => lead.id === "ld_008" && lead.lineType === "mobile"));
+});
+
 test("orders mobile first and keeps input order inside each line type", () => {
   const plan = planQueue(leads, calls, opts);
   const types = plan.selected.map((lead) => lead.lineType ?? "unknown");
@@ -35,7 +43,7 @@ test("orders mobile first and keeps input order inside each line type", () => {
   for (let i = 1; i < types.length; i++) assert.ok(rank[types[i - 1]!] <= rank[types[i]!], types.join(","));
   assert.deepEqual(
     plan.selected.filter((lead) => lead.lineType === "mobile").map((lead) => lead.id),
-    ["ld_002", "ld_004", "ld_010", "ld_012", "ld_015", "ld_018"],
+    ["ld_002", "ld_004", "ld_008", "ld_010", "ld_012", "ld_015", "ld_018"],
   );
 });
 

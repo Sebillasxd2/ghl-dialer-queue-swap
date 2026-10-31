@@ -36,6 +36,18 @@ test("protected contacts leave the queue but keep their owner", async () => {
   assert.equal(ghl.peek("ct_old_0001")?.assignedTo, null, "ordinary contacts are released");
 });
 
+test("a contact booked inside the index lag keeps its owner: protection is read from the record", async () => {
+  const { ghl, ctx } = setup();
+  // Indexed in the queue a while ago, booked a moment ago: search still shows it unbooked.
+  await ghl.addTag("ct_old_0002", "booked");
+  assert.ok(!(await ghl.searchContacts({ tag: "booked" })).contacts.some((c) => c.id === "ct_old_0002"), "not indexed yet");
+
+  const result = await wipeQueue(ghl, rep, WIPE, ctx);
+  assert.equal(result.verifiedEmpty, true);
+  assert.equal(ghl.peek("ct_old_0002")?.assignedTo, rep.ghlUserId, "the owner was not released");
+  assert.deepEqual(ghl.enrolledIn(rep.workflowId), [], "and it still left the queue");
+});
+
 test("another rep's queue is not touched", async () => {
   const { ghl, ctx } = setup();
   await wipeQueue(ghl, rep, WIPE, ctx);
@@ -71,4 +83,20 @@ test("survives 429s by backing off and retrying", async () => {
   assert.equal(result.verifiedEmpty, true);
   assert.ok(caller.retries() > 0, "some requests were rate limited");
   assert.deepEqual(ghl.enrolledIn(rep.workflowId), []);
+});
+
+test("contact ids in mixed case are all paged through: the fake's cursor follows its own sort", async () => {
+  const clock = new ManualClock(0);
+  const ghl = new FakeGhl({ clock, pageSize: 1 });
+  for (const id of ["ct_a1", "ct_B2", "ct_c3"]) ghl.seed({ id, phone: `+1555302000${id.at(-1)}`, tags: [rep.queueTag] });
+  const seen: string[] = [];
+  let cursor: unknown[] | undefined;
+  for (;;) {
+    const page = await ghl.searchContacts({ tag: rep.queueTag }, cursor);
+    if (!page.contacts.length) break;
+    seen.push(...page.contacts.map((c) => c.id));
+    if (!page.next) break;
+    cursor = page.next;
+  }
+  assert.deepEqual(seen.sort(), ["ct_B2", "ct_a1", "ct_c3"]);
 });
